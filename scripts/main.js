@@ -1,20 +1,27 @@
 // Function to read the quote of the day from Firestore "quotes" collection
 // Input param is the String representing the day of the week, aka, the document name
-function readQuote(day) {
-    db.collection("quotes").doc(day)                                                      //name of the collection and documents should matach excatly with what you have in Firestore
-      .onSnapshot(tuesdayDoc => {                                                               //arrow notation
-           console.log("current document data: " + tuesdayDoc.data());                          //.data() returns data object
-           document.getElementById("quote-goes-here").innerHTML = tuesdayDoc.data().quote;      //using javascript to display the data on the right place
+// function readQuote(day) {
+//     db.collection("quotes").doc(day)                                                      //name of the collection and documents should matach excatly with what you have in Firestore
+//       .onSnapshot(tuesdayDoc => {                                                               //arrow notation
+//            console.log("current document data: " + tuesdayDoc.data());                          //.data() returns data object
+//            document.getElementById("quote-goes-here").innerHTML = tuesdayDoc.data().quote;      //using javascript to display the data on the right place
            
-           //Here are other ways to access key-value data fields
-           //$('#quote-goes-here').text(tuesdayDoc.data().quote);         //using jquery object dot notation
-           //$("#quote-goes-here").text(tuesdayDoc.data()["quote"]);      //using json object indexing
-		       //document.querySelector("#quote-goes-here").innerHTML = tuesdayDoc.data().quote;
-      })
+//            //Here are other ways to access key-value data fields
+//            //$('#quote-goes-here').text(tuesdayDoc.data().quote);         //using jquery object dot notation
+//            //$("#quote-goes-here").text(tuesdayDoc.data()["quote"]);      //using json object indexing
+// 		       //document.querySelector("#quote-goes-here").innerHTML = tuesdayDoc.data().quote;
+//       })
+// }
+// readQuote("tuesday");        //calling the function
+function readQuote( day ) {
+    db.collection( "quotes" ).doc( day ).onSnapshot( doc => {
+        console.log("inside");
+        console.log( doc.data() );
+        document.getElementById( "quote-goes-here" ).innerHTML = doc.data().quote;
+    } )
 }
-readQuote("tuesday");        //calling the function
 
-function insertName() {
+function insertNameFromFirestore() {
     firebase.auth().onAuthStateChanged(user => {
         // Check if a user is signed in:
         if (user) {
@@ -33,7 +40,7 @@ function insertName() {
         }
     });
 }
-insertName(); //run the function
+// insertNameFromFirestore(); //run the function
 function writeHikes() {
     //define a variable for the collection you want to create in Firestore to populate data
     var hikesRef = db.collection("hikes");
@@ -98,10 +105,26 @@ function displayCardsDynamically(collection) {
 
                 //update title and text and image
                 newcard.querySelector('.card-title').innerHTML = title;
-                newcard.querySelector('.card-length').innerHTML = hikeLength +"km";
+                newcard.querySelector('.card-length').innerHTML =
+                    "Length: " + doc.data().length + " km <br>" +
+                    "Duration: " + doc.data().hike_time + "min <br>" +
+                    "Last updated: " + doc.data().last_updated.toDate().toLocaleDateString();
                 newcard.querySelector('.card-text').innerHTML = details;
                 newcard.querySelector('.card-image').src = `./images/${hikeCode}.jpg`; //Example: NV01.jpg
                 newcard.querySelector('a').href = "eachHike.html?docID="+docID;
+                newcard.querySelector('i').id = 'save-' + docID;
+                newcard.querySelector('i').onclick = () => saveBookmark(docID);
+
+                currentUser.get().then(userDoc => {
+                    //get the user name
+                    var bookmarks = userDoc.data().bookmarks;
+                    if (bookmarks.includes(docID)) {
+                       document.getElementById('save-' + docID).innerText = 'bookmark';
+                    }
+                })
+
+                
+            
 
                 //Optional: give unique ids to all elements for future use
                 // newcard.querySelector('.card-title').setAttribute("id", "ctitle" + i);
@@ -112,9 +135,63 @@ function displayCardsDynamically(collection) {
                 document.getElementById(collection + "-go-here").appendChild(newcard);
 
                 //i++;   //Optional: iterate variable to serve as unique ID
+               
+
                 
             })
         })
 }
 
-displayCardsDynamically("hikes");  //input param is the name of the collection
+// displayCardsDynamically("hikes");  //input param is the name of the collection
+
+
+//Global variable pointing to the current user's Firestore document
+var currentUser;   
+
+//Function that calls everything needed for the main page  
+function doAll() {
+    firebase.auth().onAuthStateChanged(user => {
+        if (user) {
+            currentUser = db.collection("users").doc(user.uid); //global
+            console.log(currentUser);
+
+            // figure out what day of the week it is today
+            const weekday = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+            const d = new Date();
+            let day = weekday[d.getDay()];
+
+            // the following functions are always called when someone is logged in
+            readQuote(day);
+            insertNameFromFirestore();
+            displayCardsDynamically("hikes");
+        } else {
+            // No user is signed in.
+            console.log("No user is signed in");
+            window.location.href = "login.html";
+        }
+    });
+}
+doAll();
+
+function saveBookmark(hikeDocID) {
+    var iconID = 'save-' + hikeDocID;
+    if (document.getElementById(iconID).innerText == 'bookmark') {
+        document.getElementById(iconID).innerText = 'bookmark_border';
+        currentUser.update({bookmarks: firebase.firestore.FieldValue.arrayRemove(hikeDocID)}
+            
+        )
+    } else {
+        document.getElementById(iconID).innerText = 'bookmark';
+    
+        currentUser.set({
+                bookmarks: firebase.firestore.FieldValue.arrayUnion(hikeDocID)
+            }, {
+            merge: true
+            })
+            .then(function () {
+            console.log("bookmark has been saved for: " + currentUser);
+           
+            });
+    }
+        
+}
